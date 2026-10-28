@@ -46,7 +46,7 @@ function renderBlockchain() {
   const panel = $('chain-fee');
   panel.replaceChildren();
   const heading = document.createElement('h2');
-  heading.textContent = 'کارمزد واقعی روی بلاک‌چین';
+  heading.textContent = 'میانگین فی پرداخت‌شدهٔ تراکنش‌های نمونه';
   panel.append(heading);
   const paragraph = text => { const p = document.createElement('p'); p.textContent = text; panel.append(p); };
   const asset = $('asset').value, network = $('network').value;
@@ -68,11 +68,14 @@ function renderBlockchain() {
   average.textContent = `${entry.average_fee} ${entry.fee_currency}`;
   panel.append(average);
   paragraph(`میانگین ${entry.sample_count} انتقال ساده و موفق از ${entry.target_count} نمونهٔ هدف — ${asset} روی ${network}`);
+  if (entry.total_fee != null) paragraph(`نحوهٔ محاسبه: جمع فی ${entry.sample_count} تراکنش (${entry.total_fee} ${entry.fee_currency}) تقسیم بر ${entry.sample_count}`);
+  if (entry.minimum_fee != null && entry.maximum_fee != null) paragraph(`کمترین فی: ${entry.minimum_fee} ${entry.fee_currency} — بیشترین فی: ${entry.maximum_fee} ${entry.fee_currency} — میانه: ${entry.median_fee} ${entry.fee_currency}`);
   const stale = entry.status === 'stale' || !entry.updated_at || Date.now() - Date.parse(entry.updated_at) > snapshot.stale_after_seconds * 1000;
   paragraph(`زمان بررسی: ${new Date(entry.updated_at).toLocaleString('fa-IR')}${stale ? ' — قدیمی' : ''}${entry.status === 'error' ? ' — دریافت جدید ناموفق؛ نمایش دادهٔ قبلی' : ''}${entry.sample_count < entry.target_count ? ' — نمونهٔ کمتر از هدف' : ''}`);
   if (entry.sampled_from && entry.sampled_to) paragraph(`بازهٔ تراکنش‌ها: ${new Date(entry.sampled_from).toLocaleString('fa-IR')} تا ${new Date(entry.sampled_to).toLocaleString('fa-IR')}`);
   const details = document.createElement('details');
   const summary = document.createElement('summary'); summary.textContent = 'مشاهدهٔ تراکنش‌های نمونه';
+  details.open = true;
   const list = document.createElement('ul');
   const prefixes = ['https://tronscan.org/#/transaction/', 'https://etherscan.io/tx/', 'https://bscscan.com/tx/', 'https://mempool.space/tx/'];
   for (const sample of entry.samples || []) {
@@ -83,11 +86,16 @@ function renderBlockchain() {
       link.href = sample.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
       link.textContent = sample.txid.slice(0, 10) + '…'; item.append(link);
     }
+    if (network === 'tron' && sample.energy_fee != null && sample.bandwidth_fee != null) {
+      const breakdown = document.createElement('div');
+      breakdown.textContent = `از فی کل: انرژی ${sample.energy_fee} TRX، پهنای باند ${sample.bandwidth_fee} TRX، سایر ${sample.other_fee || '0'} TRX — انرژی مصرفی: ${sample.energy_consumed ?? 'نامشخص'} واحد (TRX نیست)`;
+      item.append(breakdown);
+    }
     list.append(item);
   }
   details.append(summary, list); panel.append(details);
   paragraph('این عدد میانگین تاریخی است؛ کارمزد قطعی انتقال بعدی یا برداشت صرافی نیست. واحد فی شبکه ممکن است با واحد کارمزد صرافی فرق داشته باشد.');
-  if (network === 'tron') paragraph('در ترون، انرژی و پهنای باند تأمین‌شده می‌توانند فی پرداختی را صفر کنند؛ صفر بودن نمونه به معنی رایگان بودن انتقال برای همه نیست.');
+  if (network === 'tron') paragraph('این میانگین می‌تواند انتقال‌هایی با منابع متفاوت را شامل شود. در ترون، انرژی و پهنای باند تأمین‌شده می‌توانند فی پرداختی را صفر کنند؛ صفر بودن نمونه به معنی رایگان بودن انتقال برای همه نیست.');
 }
 
 function networks() {

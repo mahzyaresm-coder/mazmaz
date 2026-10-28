@@ -113,7 +113,14 @@ def tron_sample(tx,info,asset):
     # TransactionInfo is protobuf JSON: the omitted scalar `fee` defaults to zero.
     # Accept that default only for this fully identified successful confirmed receipt.
     units=integer(info.get('fee',0))
+    energy_paid=integer(receipt.get('energy_fee',0))
+    bandwidth_paid=integer(receipt.get('net_fee',0))
+    if units < energy_paid+bandwidth_paid:
+        raise ValueError('Inconsistent Tron paid fee components')
     return dict(txid=ident,fee=money(units,6),fee_base_units=units,
+        energy_fee=money(energy_paid,6),bandwidth_fee=money(bandwidth_paid,6),
+        other_fee=money(units-energy_paid-bandwidth_paid,6),
+        energy_consumed=integer(receipt.get('energy_usage_total',0)),
         block_number=integer(info['blockNumber']),timestamp=timestamp(info['blockTimeStamp']),
         url='https://tronscan.org/#/transaction/'+ident)
 
@@ -240,14 +247,20 @@ def summarize(asset,network,unit,decimals,samples,attempt):
     if len(ids)!=len(set(ids)):raise ValueError('Duplicate fee samples')
     count=len(samples)
     average=None
+    total=minimum=maximum=median=None
     if count:
         with localcontext() as ctx:
             ctx.prec=80
-            average=format((sum(Decimal(s['fee_base_units']) for s in samples)/count/(10**decimals)).quantize(Decimal(1).scaleb(-decimals-4)),'f')
+            values=sorted(integer(s['fee_base_units']) for s in samples)
+            total=money(sum(values),decimals)
+            minimum=money(values[0],decimals);maximum=money(values[-1],decimals)
+            midpoint=Decimal(values[count//2]) if count%2 else (Decimal(values[count//2-1])+Decimal(values[count//2]))/2
+            median=format(midpoint/(10**decimals),'f')
+            average=format((Decimal(sum(values))/count/(10**decimals)).quantize(Decimal(1).scaleb(-decimals-4)),'f')
     newest=max((s['timestamp'] for s in samples),default=None)
     stale=newest and (datetime.now(timezone.utc)-datetime.fromisoformat(newest)).total_seconds()>3600
     return dict(asset=asset,network=network,status='stale' if stale else 'ok' if count==TARGET else 'partial' if count else 'unavailable',
-        fee_currency=unit,average_fee=average,sample_count=count,target_count=TARGET,
+        fee_currency=unit,average_fee=average,total_fee=total,minimum_fee=minimum,maximum_fee=maximum,median_fee=median,sample_count=count,target_count=TARGET,
         zero_fee_count=sum(s['fee_base_units']==0 for s in samples),samples=samples,
         sampled_from=min((s['timestamp'] for s in samples),default=None),sampled_to=max((s['timestamp'] for s in samples),default=None),
         updated_at=attempt if count else None,last_attempt=attempt,

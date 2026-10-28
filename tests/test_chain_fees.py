@@ -132,3 +132,24 @@ class ChainFeeTests(unittest.TestCase):
         self.assertEqual(result['status'],'error')
         self.assertEqual(result['updated_at'],full['updated_at'])
         self.assertEqual(result['samples'],samples)
+    def test_screenshot_fee_conversion_does_not_charge_consumed_energy(self):
+        receipt=tron_receipt(348600)
+        receipt['receipt'].update(energy_usage_total=130279,energy_fee=0,net_fee=348600)
+        sample=tron_sample(tron_tx(),receipt,'USDT')
+        self.assertEqual(sample['fee'],'0.3486')
+        self.assertEqual(sample['energy_fee'],'0')
+        self.assertEqual(sample['bandwidth_fee'],'0.3486')
+        self.assertEqual(sample['energy_consumed'],130279)
+        receipt.pop('fee');receipt['receipt']['energy_fee']=1000000
+        with self.assertRaises(ValueError):tron_sample(tron_tx(),receipt,'USDT')
+    def test_mean_exposes_total_and_spread_without_excluding_high_fees(self):
+        # Hypothetical distribution, NOT the website's actual 10 transactions.
+        samples=[]
+        for index,units in enumerate([348600]*9+[24473100]):
+            sample=tron_sample(tron_tx(),tron_receipt(units),'USDT');sample['txid']=f'{index:064x}';samples.append(sample)
+        result=summarize('USDT','tron','TRX',6,samples,now())
+        self.assertEqual(Decimal(result['average_fee']),Decimal('2.76105'))
+        self.assertEqual(result['total_fee'],'27.6105')
+        self.assertEqual(result['minimum_fee'],'0.3486')
+        self.assertEqual(result['maximum_fee'],'24.4731')
+        self.assertEqual(result['median_fee'],'0.3486')
