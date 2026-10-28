@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: mazmaz-fees
+    runtime: docker
+    plan: starter
+    numInstances: 1
+    healthCheckPath: /healthz
+    envVars:
+      - key: FEE_REFRESH_SECONDS
+        value: "900"
