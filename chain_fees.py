@@ -11,16 +11,22 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 import time
 import urllib.request
 from urllib.error import HTTPError, URLError
 
+EXTRA_UNITS={'solana':('SOL',9),'xrp':('XRP',6),'stellar':('XLM',7),'litecoin':('LTC',8),'dogecoin':('DOGE',8)}
 TARGET=10
 MAX_AGE_SECONDS=86400
 USDT_TRON='TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
 TRANSFER_TOPIC='ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 EVM={
  'ethereum':dict(url='https://ethereum-rpc.publicnode.com',chain_id=1,unit='ETH',asset='ETH',explorer='https://etherscan.io/tx/'),
+ 'arbitrum':dict(url='https://arbitrum-one-rpc.publicnode.com',chain_id=42161,unit='ETH',asset='ETH',explorer='https://arbiscan.io/tx/'),
+ 'polygon':dict(url='https://polygon-bor-rpc.publicnode.com',chain_id=137,unit='POL',asset='POL',explorer='https://polygonscan.com/tx/'),
+ 'avalanche-c':dict(url='https://api.avax.network/ext/bc/C/rpc',chain_id=43114,unit='AVAX',asset='AVAX',explorer='https://snowtrace.io/tx/'),
+ 'sonic':dict(url='https://rpc.soniclabs.com',chain_id=146,unit='S',asset='S',explorer='https://sonicscan.org/tx/'),
  'bsc':dict(url='https://bsc-rpc.publicnode.com',chain_id=56,unit='BNB',asset='BNB',explorer='https://bscscan.com/tx/'),
 }
 
@@ -50,9 +56,14 @@ def money(units,decimals):
         ctx.prec=80
         return format(Decimal(units)/(10**decimals),'f')
 
+class RPCError(ValueError):
+    def __init__(self,code):
+        super().__init__('RPC error')
+        self.code=code
+
 class Client:
     """Per-provider pacing, TLS verification and bounded read-only requests."""
-    def __init__(self,base,pace=0.65):self.base=base;self.last=0;self.pace=pace
+    def __init__(self,base,pace=0.65,max_bytes=12_000_000):self.base=base;self.last=0;self.pace=pace;self.max_bytes=max_bytes
     def request(self,path='',payload=None):
         delay=self.pace-(time.monotonic()-self.last)
         if delay>0:time.sleep(delay)
@@ -64,12 +75,13 @@ class Client:
         request=urllib.request.Request(self.base+path,data=body,headers=headers)
         self.last=time.monotonic()
         with urllib.request.urlopen(request,timeout=15) as response:
-            data=response.read(12_000_001)
-            if len(data)>12_000_000:raise ValueError('Oversize chain response')
+            data=response.read(self.max_bytes+1)
+            if len(data)>self.max_bytes:raise ValueError('Oversize chain response')
             return json.loads(data)
     def rpc(self,method,params):
         response=self.request(payload={'jsonrpc':'2.0','id':1,'method':method,'params':params})
-        if response.get('error') or 'result' not in response:raise ValueError('RPC error')
+        if response.get('error'):raise RPCError(response['error'].get('code'))
+        if 'result' not in response:raise ValueError('RPC result missing')
         return response['result']
 
 
@@ -162,14 +174,16 @@ def evm_candidate(tx,targets,native):
     return None
 
 
-def evm_sample(tx,receipt,asset,native,stamp,explorer):
+def evm_sample(tx,receipt,asset,native,stamp,explorer,network=None):
     ident=txhash(tx['hash'])
     if not receipt or receipt.get('transactionHash','').lower()!=ident or hexint(receipt['status'])!=1:return None
     if receipt.get('blockHash')!=tx.get('blockHash') or receipt.get('blockNumber')!=tx.get('blockNumber'):
         raise ValueError('Receipt does not match block')
     gas=hexint(receipt['gasUsed'])
+    l1gas=hexint(receipt['gasUsedForL1']) if network=='arbitrum' else 0
+    if l1gas>gas:raise ValueError('Inconsistent Arbitrum gas components')
     if asset==native:
-        if gas!=21000:return None  # no contract execution / batch transfers
+        if gas-l1gas!=21000:return None  # no contract execution / batch transfers
     else:
         data=tx['input'].lower()
         if not any(log.get('address','').lower()==tx['to'].lower() and len(log.get('topics',[]))==3
@@ -188,7 +202,7 @@ def evm_sample(tx,receipt,asset,native,stamp,explorer):
 def sample_evm(network,targets,client=None):
     config=EVM[network];client=client or Client(config['url'])
     if hexint(client.rpc('eth_chainId',[]))!=config['chain_id']:raise ValueError('Wrong chain ID')
-    if network=='ethereum':
+    if network in ['ethereum','arbitrum']:
         block=client.rpc('eth_getBlockByNumber',['finalized',True]);head=hexint(block['number'])
     else:
         head=hexint(client.rpc('eth_blockNumber',[]))-20
@@ -206,7 +220,7 @@ def sample_evm(network,targets,client=None):
             seen.add(ident);reads+=1
             if reads>80 or time.monotonic()>deadline:return found
             receipt=client.rpc('eth_getTransactionReceipt',[ident])
-            sample=evm_sample(tx,receipt,asset,config['asset'],stamp,config['explorer'])
+            sample=evm_sample(tx,receipt,asset,config['asset'],stamp,config['explorer'],network)
             if sample:found[asset].append(sample)
         if all(len(v)>=TARGET for v in found.values()):break
     return found
@@ -269,32 +283,48 @@ def summarize(asset,network,unit,decimals,samples,attempt):
 
 def collect(rows,previous=(),samplers=None):
     """An unavailable chain never blocks publishing exchange fees."""
+    from extra_chains import SOLANA_MINTS, sample_solana, sample_xrp, sample_stellar, sample_blockcypher
+    registry=json.loads((Path(__file__).parent/'token_registry.json').read_text())
     groups={};unavailable=[];old={(r['asset'],r['network']):r for r in previous}
     pairs=sorted({(r['asset'],r['network']) for r in rows});attempt=now()
     for asset,network in pairs:
         contract=None
         supported=(network=='tron' and asset in ['USDT','TRX']) or (network=='bitcoin' and asset=='BTC')
+        if network in EXTRA_UNITS:
+            supported=asset==EXTRA_UNITS[network][0] or (network=='solana' and asset in SOLANA_MINTS)
         if network in EVM:
             if asset==EVM[network]['asset']:supported=True
             else:
                 addresses={r['contract_address'].lower() for r in rows if r['asset']==asset and r['network']==network
                     and isinstance(r.get('contract_address'),str) and re.fullmatch('0x[0-9a-fA-F]{40}',r['contract_address'])}
+                registered=registry.get(network,{}).get(asset)
                 if len(addresses)==1:contract=next(iter(addresses));supported=True
+                elif not addresses and registered:contract=registered['address'];supported=True
         if supported:groups.setdefault(network,{})[asset]=contract
         else:unavailable.append(dict(asset=asset,network=network,status='unsupported',sample_count=0,
             target_count=TARGET,average_fee=None,samples=[],updated_at=None,last_attempt=attempt,
-            reason='verified_token_identity_missing' if network in EVM else 'sampler_not_available'))
+            reason='verified_token_identity_missing' if network in EVM or network=='solana' else 'offchain_routing_fee' if network=='bitcoin-lightning' else 'additional_rollup_fee_not_implemented' if network in ['arbitrum','optimism','base','nobitex:LINEA'] else 'sampler_not_available'))
     def sample_group(item):
         network,targets=item
         unit,decimals=(EVM[network]['unit'],18) if network in EVM else (None,None)
         if network=='tron':unit,decimals='TRX',6
         elif network=='bitcoin':unit,decimals='BTC',8
+        elif network in EXTRA_UNITS:unit,decimals=EXTRA_UNITS[network]
         try:
             if samplers and network in samplers:sampled=samplers[network](targets)
             elif network=='tron':sampled=sample_tron(targets)
             elif network=='bitcoin':sampled=sample_bitcoin()
+            elif network=='solana':sampled=sample_solana(targets)
+            elif network=='xrp':sampled=sample_xrp()
+            elif network=='stellar':sampled=sample_stellar()
+            elif network in ['litecoin','dogecoin']:sampled=sample_blockcypher(unit)
             else:sampled=sample_evm(network,targets)
             result=[summarize(asset,network,unit,decimals,sampled.get(asset,[]),attempt) for asset in targets]
+            for entry in result:
+                if targets[entry['asset']]:
+                    entry['token_contract']=targets[entry['asset']]
+                elif network=='solana' and entry['asset'] in SOLANA_MINTS:
+                    entry['token_mint']=SOLANA_MINTS[entry['asset']]
             # No new valid samples must not erase a previous mean or make it fresh.
             for index,entry in enumerate(result):
                 key=(entry['asset'],network)

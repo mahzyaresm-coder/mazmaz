@@ -1,5 +1,6 @@
 """User-selected assets; never use substring matching for token identities."""
 from decimal import Decimal, localcontext
+from networks import canonical_network
 
 REQUESTED_ASSETS = (
  'BTC','ETH','USDT','BNB','DOGE','SHIB','IRR','XRP','LTC','BCH','TRX','ADA',
@@ -16,6 +17,7 @@ def selected_rows(rows):
         symbol={'TRON':'TRX','1K_SHIB':'SHIB'}.get(source,source)
         if symbol not in REQUESTED_ASSETS:continue
         row=dict(original)
+        row['network']=canonical_network(row.get('exchange'),row.get('network_raw'),row.get('network_label'),row.get('network'))
         if source=='1K_SHIB':
             if str(row.get('asset_scale'))!='1000':
                 raise ValueError('Unverified SHIB unit scale')

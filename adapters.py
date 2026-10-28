@@ -1,5 +1,6 @@
 """Verified public withdrawal sources. Amounts are in the row's asset unit."""
 from datetime import datetime, timezone
+from networks import canonical_network
 from decimal import Decimal
 from html.parser import HTMLParser
 import json
@@ -29,7 +30,7 @@ def amount(value):
 def row(exchange,asset,raw,label,fee,minimum,enabled,source,stamp,fetched,**extra):
     if not all(isinstance(x,str) and x.strip() for x in [asset,raw,label]):
         raise ValueError('Missing currency/network identity')
-    return dict(exchange=exchange,asset=asset.upper(),network=ALIASES.get(raw.upper(),exchange+':'+raw),
+    return dict(exchange=exchange,asset=asset.upper(),network=canonical_network(exchange,raw,label,ALIASES.get(raw.upper(),exchange+':'+raw)),
                 network_raw=raw,network_label=label,fee=amount(fee),fee_currency=asset.upper(),
                 minimum=amount(minimum),withdrawal_enabled=enabled,source=source,
                 updated_at=stamp,fetched_at=fetched,**extra)

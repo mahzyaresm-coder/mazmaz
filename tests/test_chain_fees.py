@@ -67,13 +67,13 @@ class ChainFeeTests(unittest.TestCase):
         with self.assertRaises(ValueError):evm_sample(tx,receipt,'ETH','ETH',now(),'https://etherscan.io/tx/')
     def test_errors_preserve_timestamp_and_unsupported_is_not_zero(self):
         old={'asset':'USDT','network':'tron','average_fee':'1.2','sample_count':10,'updated_at':now(),'samples':[]}
-        rows=[{'asset':'USDT','network':'tron'},{'asset':'USDT','network':'solana'}]
+        rows=[{'asset':'USDT','network':'tron'},{'asset':'USDT','network':'ton'}]
         def offline(targets):raise OSError('offline')
         result=collect(rows,[old],{'tron':offline})
         tron=next(r for r in result if r['network']=='tron')
         self.assertEqual(tron['status'],'error');self.assertEqual(tron['average_fee'],'1.2')
         self.assertEqual(tron['updated_at'],old['updated_at'])
-        other=next(r for r in result if r['network']=='solana')
+        other=next(r for r in result if r['network']=='ton')
         self.assertEqual(other['status'],'unsupported');self.assertIsNone(other['average_fee'])
     def test_tron_sampling_stops_at_ten_and_checks_block(self):
         transactions=[]
@@ -89,7 +89,7 @@ class ChainFeeTests(unittest.TestCase):
         self.assertEqual(len(sampled['USDT']),10)
         self.assertEqual(len({s['txid'] for s in sampled['USDT']}),10)
     def test_no_unverified_evm_token_or_rollup_fee(self):
-        rows=[{'asset':'USDT','network':'ethereum'},{'asset':'USDT','network':'arbitrum'}]
+        rows=[{'asset':'UNKNOWN','network':'ethereum'},{'asset':'USDT','network':'optimism'}]
         result=collect(rows)
         self.assertTrue(all(r['status']=='unsupported' for r in result))
     def test_bitcoin_batch_and_coinbase_excluded_and_satoshi_units(self):

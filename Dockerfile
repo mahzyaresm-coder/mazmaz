@@ -2,7 +2,7 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py server.py collector.py adapters.py assets.py chain_fees.py ./
+COPY app.py server.py collector.py adapters.py assets.py networks.py chain_fees.py extra_chains.py token_registry.json ./
 COPY web ./web
 RUN useradd --create-home appuser && mkdir -p /app/data && chown appuser:appuser /app/data
 USER appuser
