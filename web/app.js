@@ -17,6 +17,11 @@ function render() {
     node.textContent = `${exchange.name} · ${label}`;
     return node;
   }));
+  if ($('asset').value !== '*' && !snapshot.rows.some(r => r.asset === $('asset').value)) {
+    $('status').textContent = $('asset').value === 'IRR' ? 'ریال شبکهٔ رمزارزی ندارد؛ کارمزد برداشت بانکی هنوز به این سامانه متصل نیست.' : 'برای این ارز هنوز دادهٔ تأییدشده‌ای از صرافی‌های انتخابی دریافت نشده است.';
+  } else {
+    $('status').textContent = 'نمایش فقط ارزهای انتخابی؛ زمان داده و وضعیت هر منبع را بررسی کنید.';
+  }
   const selected = snapshot.rows.filter(r => ($('asset').value === '*' || r.asset === $('asset').value) && ($('network').value === '*' || r.network === $('network').value));
   selected.sort((a,b) => a.asset.localeCompare(b.asset) || a.network.localeCompare(b.network) || a.exchange.localeCompare(b.exchange));
   $('rows').replaceChildren(...selected.map(row => {
@@ -44,9 +49,9 @@ async function refresh() {
     const response = await fetch('./fees.json', {cache: 'no-store'});
     if (!response.ok) throw new Error('unavailable');
     snapshot = await response.json();
-    choices($('asset'), ['*', ...new Set(snapshot.rows.map(r => r.asset))].sort());
+    choices($('asset'), ['*', ...(snapshot.requested_assets || [...new Set(snapshot.rows.map(r => r.asset))])].sort());
     networks();
-    $('status').textContent = snapshot.rows.length ? 'دریافت زمان‌بندی‌شده تقریباً هر ۱۵ دقیقه؛ احتمال تأخیر وجود دارد. زمان داده و وضعیت هر منبع را بررسی کنید.' : 'هنوز دادهٔ تأییدشده‌ای ثبت نشده است. اتصال زنده به صرافی‌ها در حال آماده‌سازی است.';
+    if (!snapshot.rows.length) $('status').textContent = 'هنوز دادهٔ تأییدشده‌ای برای ارزهای انتخابی دریافت نشده است.';
   } catch {
     $('rows').replaceChildren();
     $('asset').disabled = $('network').disabled = true;

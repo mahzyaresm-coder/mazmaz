@@ -1,5 +1,6 @@
 """WSGI entry point for an always-on, single-worker deployment."""
 import atexit
+from assets import selected_rows, REQUESTED_ASSETS
 import json
 import os
 from pathlib import Path
@@ -28,10 +29,10 @@ def create_app(run_collector=True):
         elif route in ['/api/fees','/fees.json']:
             try:
                 data=json.loads(path.read_text()) if path.exists() else {}
-                rows=validate_rows(data.get('rows',[]) if isinstance(data,dict) else data)
+                rows=selected_rows(validate_rows(data.get('rows',[]) if isinstance(data,dict) else data))
                 sources=data.get('sources',{}) if isinstance(data,dict) else {}
                 sources={k:v for k,v in sources.items() if k in {e['id'] for e in EXCHANGES}}
-                body=json.dumps(dict(exchanges=EXCHANGES,rows=rows,sources=sources,stale_after_seconds=3600),ensure_ascii=False).encode()
+                body=json.dumps(dict(exchanges=EXCHANGES,requested_assets=REQUESTED_ASSETS,rows=rows,sources=sources,stale_after_seconds=3600),ensure_ascii=False).encode()
             except (ValueError,KeyError,TypeError,OSError):
                 status='503 Service Unavailable';body=b'{"error":"invalid_or_unavailable_snapshot"}'
         elif route in ['/','/app.js','/style.css']:

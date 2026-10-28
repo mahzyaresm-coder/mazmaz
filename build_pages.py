@@ -1,5 +1,6 @@
 """Build the same fee UI as a portable static GitHub Pages artifact."""
 import argparse
+from assets import selected_rows, REQUESTED_ASSETS
 import json
 import logging
 from pathlib import Path
@@ -17,7 +18,7 @@ def build(output, snapshot, refresh=False):
         run_once(snapshot)
     if not snapshot.exists():raise ValueError('No fee snapshot available')
     document=json.loads(snapshot.read_text())
-    rows=validate_rows(document['rows'])
+    rows=selected_rows(validate_rows(document['rows']))
     active={e['id'] for e in EXCHANGES}
     rows=[r for r in rows if r['exchange'] in active]
     if not rows:raise ValueError('No usable fee rows; refusing empty publication')
@@ -26,7 +27,7 @@ def build(output, snapshot, refresh=False):
     for name in ['index.html','app.js','style.css']:
         shutil.copyfile(ROOT/'web'/name,output/name)
     atomic_json(output/'fees.json',dict(exchanges=EXCHANGES,rows=rows,sources=sources,
-        stale_after_seconds=3600,checked_at=document.get('checked_at'),built_at=now()))
+        requested_assets=REQUESTED_ASSETS,stale_after_seconds=3600,checked_at=document.get('checked_at'),built_at=now()))
     (output/'.nojekyll').write_text('')
     logging.info('Built %d fee rows; source status: %s',len(rows),{k:v.get('status') for k,v in sources.items()})
     return rows

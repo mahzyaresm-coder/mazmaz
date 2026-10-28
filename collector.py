@@ -1,5 +1,6 @@
 """Periodic public-source collection; fail closed on unknown source schemas."""
 import argparse
+from assets import selected_rows
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -143,7 +144,7 @@ def collect_one(exchange, fetcher=fetch):
         parser = {'tabdeal':parse_tabdeal_api, 'wallex':parse_wallex, 'nobitex':parse_nobitex, 'bitpin':parse_bitpin}.get(exchange)
         if parser is None:
             raise SourceError('Parser not verified: source requires inspection of withdrawal tab')
-        rows = parser(text,now())
+        rows = selected_rows(parser(text,now()))
         if not rows or not any(r['fee'] is not None for r in rows):
             raise SourceError('No withdrawal fees; refusing to replace previous data')
         validate_rows(rows)
@@ -173,7 +174,7 @@ def run_once(path, fetcher=fetch):
     # One atomic document keeps source status consistent with its fee rows.
     previous = json.loads(path.read_text()) if path.exists() else {'rows':[], 'sources':{}}
     if isinstance(previous,list): previous = {'rows':previous,'sources':{}}
-    rows = previous['rows']
+    rows = selected_rows(previous['rows'])
     statuses = previous.get('sources',{})
     with ThreadPoolExecutor(max_workers=5) as executor:
         results = list(executor.map(lambda exchange: collect_one(exchange,fetcher),[e['id'] for e in EXCHANGES]))

@@ -1,5 +1,6 @@
 """Local fee comparison app. No third-party dependencies or account credentials."""
 import argparse
+from assets import selected_rows, REQUESTED_ASSETS
 import json
 import os
 import threading
@@ -57,8 +58,8 @@ class Handler(BaseHTTPRequestHandler):
                 path = Path(os.environ.get('FEE_DATA_FILE', str(ROOT/'data'/'fees.json')))
                 document = json.loads(path.read_text()) if path.exists() else {}
                 sources = document.get('sources',{}) if isinstance(document,dict) else {}
-                rows = validate_rows(document.get('rows',[]) if isinstance(document,dict) else document)
-                self.send_payload(200, json.dumps({'exchanges': EXCHANGES, 'rows': rows, 'sources': sources, 'stale_after_seconds': 3600}, ensure_ascii=False).encode(), 'application/json; charset=utf-8')
+                rows = selected_rows(validate_rows(document.get('rows',[]) if isinstance(document,dict) else document))
+                self.send_payload(200, json.dumps({'exchanges': EXCHANGES, 'requested_assets': REQUESTED_ASSETS, 'rows': rows, 'sources': sources, 'stale_after_seconds': 3600}, ensure_ascii=False).encode(), 'application/json; charset=utf-8')
             except (ValueError, KeyError, TypeError, OSError):
                 self.send_payload(503, b'{"error":"invalid_or_unavailable_snapshot"}', 'application/json')
         elif route in ('/', '/app.js', '/style.css'):
