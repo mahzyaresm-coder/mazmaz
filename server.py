@@ -52,7 +52,7 @@ def validate_rows(rows):
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         route = self.path.split('?',1)[0]
-        if route == '/api/fees':
+        if route in ['/api/fees','/fees.json']:
             try:
                 path = Path(os.environ.get('FEE_DATA_FILE', str(ROOT/'data'/'fees.json')))
                 document = json.loads(path.read_text()) if path.exists() else {}

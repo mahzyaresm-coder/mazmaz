@@ -41,12 +41,12 @@ async function refresh() {
   if ($('refresh').disabled) return;
   $('refresh').disabled = true;
   try {
-    const response = await fetch('/api/fees');
+    const response = await fetch('./fees.json', {cache: 'no-store'});
     if (!response.ok) throw new Error('unavailable');
     snapshot = await response.json();
     choices($('asset'), ['*', ...new Set(snapshot.rows.map(r => r.asset))].sort());
     networks();
-    $('status').textContent = snapshot.rows.length ? 'دریافت خودکار هر ۱۵ دقیقه؛ زمان داده و وضعیت هر منبع را بررسی کنید.' : 'هنوز دادهٔ تأییدشده‌ای ثبت نشده است. اتصال زنده به صرافی‌ها در حال آماده‌سازی است.';
+    $('status').textContent = snapshot.rows.length ? 'دریافت زمان‌بندی‌شده تقریباً هر ۱۵ دقیقه؛ احتمال تأخیر وجود دارد. زمان داده و وضعیت هر منبع را بررسی کنید.' : 'هنوز دادهٔ تأییدشده‌ای ثبت نشده است. اتصال زنده به صرافی‌ها در حال آماده‌سازی است.';
   } catch {
     $('rows').replaceChildren();
     $('asset').disabled = $('network').disabled = true;

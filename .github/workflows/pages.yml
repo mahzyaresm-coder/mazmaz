@@ -1,0 +1,54 @@
+name: Update fees and publish site
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['DEPLOYMENT.md']
+  workflow_dispatch:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fee-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test collectors and application
+        run: python -m unittest discover -s tests -v
+      - name: Restore last successful snapshot
+        uses: actions/cache@v4
+        with:
+          path: data/fees.json
+          key: fee-snapshot-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            fee-snapshot-${{ runner.os }}-
+      - name: Collect and build (preserve per-source failures)
+        run: python build_pages.py --refresh
+      - name: Check frontend syntax
+        run: node --check _site/app.js
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

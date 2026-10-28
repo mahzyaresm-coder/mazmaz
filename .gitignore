@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 data/fees.json
 .venv/
+
+_site/

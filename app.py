@@ -25,7 +25,7 @@ def create_app(run_collector=True):
             status='405 Method Not Allowed';body=b'{"error":"method_not_allowed"}'
         elif route=='/healthz':
             body=b'{"status":"running"}'
-        elif route=='/api/fees':
+        elif route in ['/api/fees','/fees.json']:
             try:
                 data=json.loads(path.read_text()) if path.exists() else {}
                 rows=validate_rows(data.get('rows',[]) if isinstance(data,dict) else data)
