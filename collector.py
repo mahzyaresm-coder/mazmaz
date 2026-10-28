@@ -185,7 +185,9 @@ def run_once(path, fetcher=fetch):
             rows = [r for r in rows if r['exchange'] != exchange] + fresh
             statuses[exchange].pop('error',None)
         logging.info('%s: %s',exchange,status['status'])
-    result = dict(rows=rows,sources=statuses,checked_at=now())
+    from chain_fees import collect
+    blockchain = collect(rows,previous.get('blockchain_fees',[]))
+    result = dict(rows=rows,sources=statuses,blockchain_fees=blockchain,checked_at=now())
     atomic_json(path,result)
     return result
 

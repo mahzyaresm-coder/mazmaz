@@ -59,7 +59,7 @@ class Handler(BaseHTTPRequestHandler):
                 document = json.loads(path.read_text()) if path.exists() else {}
                 sources = document.get('sources',{}) if isinstance(document,dict) else {}
                 rows = selected_rows(validate_rows(document.get('rows',[]) if isinstance(document,dict) else document))
-                self.send_payload(200, json.dumps({'exchanges': EXCHANGES, 'requested_assets': REQUESTED_ASSETS, 'rows': rows, 'sources': sources, 'stale_after_seconds': 3600}, ensure_ascii=False).encode(), 'application/json; charset=utf-8')
+                self.send_payload(200, json.dumps({'exchanges': EXCHANGES, 'requested_assets': REQUESTED_ASSETS, 'rows': rows, 'sources': sources, 'blockchain_fees': document.get('blockchain_fees',[]) if isinstance(document,dict) else [], 'stale_after_seconds': 3600}, ensure_ascii=False).encode(), 'application/json; charset=utf-8')
             except (ValueError, KeyError, TypeError, OSError):
                 self.send_payload(503, b'{"error":"invalid_or_unavailable_snapshot"}', 'application/json')
         elif route in ('/', '/app.js', '/style.css'):

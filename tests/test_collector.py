@@ -11,6 +11,10 @@ from server import load_snapshot
 FIXTURE = (Path(__file__).parent/'fixtures'/'tabdeal.html').read_text()
 
 class CollectorTests(unittest.TestCase):
+    def setUp(self):
+        sampler = patch("chain_fees.collect", return_value=[])
+        sampler.start()
+        self.addCleanup(sampler.stop)
     def test_authentic_networks_and_minimum_as_rendered(self):
         rows = parse_tabdeal(FIXTURE,now())
         usdt = {r['network']:r for r in rows if r['asset']=='USDT'}

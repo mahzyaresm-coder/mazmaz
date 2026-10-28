@@ -27,7 +27,7 @@ def build(output, snapshot, refresh=False):
     for name in ['index.html','app.js','style.css']:
         shutil.copyfile(ROOT/'web'/name,output/name)
     atomic_json(output/'fees.json',dict(exchanges=EXCHANGES,rows=rows,sources=sources,
-        requested_assets=REQUESTED_ASSETS,stale_after_seconds=3600,checked_at=document.get('checked_at'),built_at=now()))
+        blockchain_fees=document.get('blockchain_fees',[]),requested_assets=REQUESTED_ASSETS,stale_after_seconds=3600,checked_at=document.get('checked_at'),built_at=now()))
     (output/'.nojekyll').write_text('')
     logging.info('Built %d fee rows; source status: %s',len(rows),{k:v.get('status') for k,v in sources.items()})
     return rows
